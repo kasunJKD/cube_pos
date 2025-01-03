@@ -1,6 +1,7 @@
 package main
 import "core:fmt"
 import "core:mem"
+import "core:strings"
 import rl "vendor:raylib"
 
 SCREEN_WIDTH :: 1024
@@ -20,6 +21,7 @@ App :: struct {
 	debug_mode:                    bool,
 	display_cards:                 ^[20]DISPLAY_CARD,
 	display_card_cur_active_index: i32,
+	scroll_offset_y:               i32,
 }
 
 GRID_M :: struct {
@@ -100,6 +102,7 @@ app: App = App {
 	debug_mode = false,
 	display_cards = nil,
 	display_card_cur_active_index = -1,
+	scroll_offset_y = 0,
 }
 
 main :: proc() {
@@ -122,6 +125,24 @@ process_input :: proc() {
 	if rl.IsKeyPressed(.P) {
 		fmt.println(app.debug_mode)
 		app.debug_mode = !app.debug_mode
+	}
+
+	// Scroll up
+	//@TODO check mouse or touch positions
+	if rl.IsKeyDown(.W) {
+		app.scroll_offset_y -= 10
+		if app.scroll_offset_y < 0 {
+			app.scroll_offset_y = 0 // Prevent scrolling above the first card
+		}
+	}
+
+	// Scroll down
+	if rl.IsKeyDown(.S) {
+		app.scroll_offset_y += 10
+		max_scroll := (len(app.display_cards^) * DISPLAY_CARD_HEIGHT) - (BLOCK_HEIGHT * 6)
+		if app.scroll_offset_y > i32(max_scroll) {
+			app.scroll_offset_y = i32(max_scroll) // Prevent scrolling beyond the last card
+		}
 	}
 
 	if rl.IsKeyPressed(.A) {
@@ -147,7 +168,6 @@ process_input :: proc() {
 			}
 		}
 
-		fmt.println(app.display_cards^)
 	}
 }
 
@@ -259,7 +279,6 @@ draw_m :: proc() {
 	draw_right_action_grid(rl.WHITE)
 
 	//display_cards
-
 	draw_display_cards()
 
 	if app.debug_mode {
@@ -341,26 +360,60 @@ draw_right_action_grid :: proc(color: rl.Color) {
 
 
 draw_display_cards :: proc() {
+	right_display_x := app.grid.right_display_grid[0][0].x + BLOCK_PADDING
+	right_display_y := app.grid.right_display_grid[0][0].y + BLOCK_PADDING
+	right_display_width := (BLOCK_WIDTH * 3) - BLOCK_OFFSET
+	right_display_height := (BLOCK_HEIGHT * 6) - BLOCK_OFFSET
+	rl.BeginScissorMode(
+		right_display_x,
+		right_display_y,
+		i32(right_display_width),
+		i32(right_display_height),
+	)
+	defer rl.EndScissorMode()
 	for i := 0; i < len(app.display_cards^); i += 1 {
 		card := (app.display_cards^)[i]
 		if card.active {
-			rl.DrawRectangle(
-				card.x + 5,
-				card.y,
-				DISPLAY_CARD_WIDTH,
-				DISPLAY_CARD_HEIGHT,
-				rl.LIGHTGRAY,
-			)
-			rl.DrawRectangleLines(
-				card.x + 5,
-				card.y,
-				DISPLAY_CARD_WIDTH,
-				DISPLAY_CARD_HEIGHT,
-				rl.BLACK,
-			)
-			//	rl.DrawText(card.name, card.x + 10, card.y + 10, 20, rl.BLACK) // Draw name
-			//	rl.DrawText(card.type, card.x + 10, card.y + 40, 20, rl.BLACK) // Draw type
-			//	rl.DrawText(card.amount, card.x + 10, card.y + 70, 20, rl.BLACK) // Draw amount
+			// Apply scroll offset to card position
+			card_y := card.y - app.scroll_offset_y
+			if card_y + DISPLAY_CARD_HEIGHT > right_display_y &&
+			   card_y < right_display_y + i32(right_display_height) {
+				rl.DrawRectangle(
+					card.x + 5,
+					card_y,
+					DISPLAY_CARD_WIDTH,
+					DISPLAY_CARD_HEIGHT,
+					rl.LIGHTGRAY,
+				)
+				rl.DrawRectangleLines(
+					card.x + 5,
+					card_y,
+					DISPLAY_CARD_WIDTH,
+					DISPLAY_CARD_HEIGHT,
+					rl.BLACK,
+				)
+				rl.DrawText(
+					strings.clone_to_cstring(card.name),
+					card.x + 10,
+					card_y + 10,
+					20,
+					rl.BLACK,
+				) // Draw name
+				rl.DrawText(
+					strings.clone_to_cstring(card.type),
+					card.x + 10,
+					card_y + 40,
+					20,
+					rl.BLACK,
+				) // Draw type
+				rl.DrawText(
+					strings.clone_to_cstring(card.amount),
+					card.x + 10,
+					card_y + 70,
+					20,
+					rl.BLACK,
+				) // Draw amount
+			}
 		}
 	}
 }
